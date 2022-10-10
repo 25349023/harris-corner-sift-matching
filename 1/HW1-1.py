@@ -56,11 +56,46 @@ def show_then_write(images, titles):
         cv2.imwrite(f'output/{title}.jpg', normalize(image, 0, 255))
 
 
+def gradient_field(image, threshold_ratio=0.0):
+    sobel = (np.array([[1., 2, 1], [0, 0, 0], [-1, -2, -1]]) / 8,
+             np.array([[-1., 0, 1], [-2, 0, 2], [-1, 0, 1]]) / 8)  # (hy, hx)
+    image = normalize(image, 0, 1)
+
+    gradient = [apply_kernel(s, image) for s in sobel]
+    magnitude = np.hypot(*gradient)
+    direction = np.arctan2(*gradient)
+
+    threshold = magnitude.max() * threshold_ratio
+    mask = magnitude <= threshold
+    gradient[0][mask] = 0.0
+    gradient[1][mask] = 0.0
+    direction[mask] = 0.0
+    magnitude[mask] = 0.0
+    return gradient, magnitude, direction
+
+
+def direction_in_hue(magnitude, direction):
+    hsv = np.zeros(direction.shape, dtype=np.uint8)
+
+    hsv[..., 0] = direction.mean(axis=-1) * 180 / np.pi / 2
+    hsv[..., 1] = 255
+    hsv[..., 2] = normalize(magnitude.mean(axis=-1), 0, 255)
+    rgb = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+    return rgb
+
+
+def show_gradient(magnitude, direction, name):
+    dire_rgb = direction_in_hue(magnitude, direction)
+    show_then_write([magnitude, dire_rgb],
+                    [f'{name}_grad_magnitude', f'{name}_grad_direction'])
+
+
 if __name__ == '__main__':
     img = cv2.imread('chessboard-hw1.jpg')
     img2 = cv2.imread('1a_notredame.jpg')
     show_multiple_image([img, img2], ['original chessboard', 'original_notredame'])
 
+    # Step 1
     blurrer5x5 = gaussian_blurrer(5, 5)
     blurrer10x10 = gaussian_blurrer(10, 5)
 
@@ -75,3 +110,14 @@ if __name__ == '__main__':
                     ['notredame_blur5x5', 'notredame_blur10x10'])
 
     plt.show()
+
+    # Step 2
+    images = {'chessboard_5x5': chessboard_5x5,
+              'chessboard_10x10': chessboard_10x10,
+              'notredame_5x5': notredame_5x5,
+              'notredame_10x10': notredame_10x10}
+
+    for name, img in images.items():
+        grad, mag, dire = gradient_field(img, 0.1)
+        show_gradient(mag, dire, name)
+
