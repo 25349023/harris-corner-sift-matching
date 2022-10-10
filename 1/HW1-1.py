@@ -31,36 +31,47 @@ def gaussian_blurrer(k_size, sigma):
     return functools.partial(apply_kernel, kernel)
 
 
-def imshow(image, title=''):
+def norm_for_showing(image):
     image = normalize(image, 0, 255)
-    plt.imshow(cv2.cvtColor(image.astype(np.uint8), cv2.COLOR_BGR2RGB))
+    return cv2.cvtColor(image.astype(np.uint8), cv2.COLOR_BGR2RGB)
+
+
+def imshow(image, title=''):
+    plt.imshow(norm_for_showing(image))
     plt.title(title)
     plt.show()
 
 
-def show_then_write(image, filename):
-    imshow(image, filename.split('.')[0])
-    cv2.imwrite(f'output/{filename}', normalize(image, 0, 255))
+def show_multiple_image(images, titles):
+    fig, ax = plt.subplots(1, len(images), figsize=(16, 10))
+    for i, (image, t) in enumerate(zip(images, titles)):
+        ax[i].imshow(norm_for_showing(image))
+        ax[i].set_title(t)
+    fig.show()
+
+
+def show_then_write(images, titles):
+    show_multiple_image(images, titles)
+    for image, title in zip(images, titles):
+        cv2.imwrite(f'output/{title}.jpg', normalize(image, 0, 255))
 
 
 if __name__ == '__main__':
     img = cv2.imread('chessboard-hw1.jpg')
-    imshow(img, 'original chessboard')
-
     img2 = cv2.imread('1a_notredame.jpg')
-    imshow(img2, 'original_notredame')
+    show_multiple_image([img, img2], ['original chessboard', 'original_notredame'])
 
     blurrer5x5 = gaussian_blurrer(5, 5)
     blurrer10x10 = gaussian_blurrer(10, 5)
 
     chessboard_5x5 = blurrer5x5(img)
-    show_then_write(chessboard_5x5, 'chessboard_blur5x5.jpg')
-
     chessboard_10x10 = blurrer10x10(img)
-    show_then_write(chessboard_10x10, 'chessboard_blur10x10.jpg')
+    show_then_write([chessboard_5x5, chessboard_10x10],
+                    ['chessboard_blur5x5', 'chessboard_blur10x10'])
 
-    notredame5x5 = blurrer5x5(img2)
-    show_then_write(notredame5x5, 'notredame_blur5x5.jpg')
+    notredame_5x5 = blurrer5x5(img2)
+    notredame_10x10 = blurrer10x10(img2)
+    show_then_write([notredame_5x5, notredame_10x10],
+                    ['notredame_blur5x5', 'notredame_blur10x10'])
 
-    notredame10x10 = blurrer10x10(img2)
-    show_then_write(notredame10x10, 'notredame_blur10x10.jpg')
+    plt.show()
