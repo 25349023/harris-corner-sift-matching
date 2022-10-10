@@ -39,7 +39,6 @@ def norm_for_showing(image):
 def imshow(image, title=''):
     plt.imshow(norm_for_showing(image))
     plt.title(title)
-    plt.show()
 
 
 def show_multiple_image(images, titles):
@@ -115,22 +114,56 @@ def calc_eigen_minus(window, Ixx, Ixy, Iyy):
     return eigen_minus, response
 
 
+def windowed_slices(idx, wr):
+    x, y, ch = idx
+    s = [(np.s_[max(u - wr, 0):u + wr + 1], np.s_[max(v - wr, 0):v + wr + 1], c)
+         for u, v, c in zip(x, y, ch)]
+
+    return s
+
+
+def non_maximal_suppression(raw_corner: np.ndarray, w_radius=5, threshold=1e-2):
+    raw_corner = raw_corner.copy()
+    raw_corner[raw_corner < threshold] = 0
+    result = np.zeros_like(raw_corner)
+
+    flatten_cmap = raw_corner.reshape([-1, raw_corner.shape[-1]])
+
+    while np.count_nonzero(raw_corner) > 0:
+        pos = flatten_cmap.argmax(axis=0)
+        unravel_pos = *np.unravel_index(pos, raw_corner.shape[:-1]), np.array([0, 1, 2], dtype=np.int64)
+        result[unravel_pos] = 1
+        neighbor_slices = windowed_slices(unravel_pos, w_radius)
+        for neighbor in neighbor_slices:
+            raw_corner[neighbor] = 0
+
+    return result
+
+
+def show_corner(image, corner, size, name):
+    plt.figure(figsize=(10, 10))
+    imshow(image, f'corner_detection_{size}')
+    plt.scatter(corner.nonzero()[1], corner.nonzero()[0], c='r')
+    plt.savefig(f'output/{name}_corner_detection_{size}.jpg')
+    plt.show()
+
+
 if __name__ == '__main__':
-    img = cv2.imread('chessboard-hw1.jpg')
-    img2 = cv2.imread('1a_notredame.jpg')
-    show_multiple_image([img, img2], ['original chessboard', 'original_notredame'])
+    chessboard = cv2.imread('chessboard-hw1.jpg')
+    notredame = cv2.imread('1a_notredame.jpg')
+    show_multiple_image([chessboard, notredame], ['original chessboard', 'original_notredame'])
 
     # Step 1
     blurrer5x5 = gaussian_blurrer(5, 5)
     blurrer10x10 = gaussian_blurrer(10, 5)
 
-    chessboard_5x5 = blurrer5x5(img)
-    chessboard_10x10 = blurrer10x10(img)
+    chessboard_5x5 = blurrer5x5(chessboard)
+    chessboard_10x10 = blurrer10x10(chessboard)
     show_then_write([chessboard_5x5, chessboard_10x10],
                     ['chessboard_blur5x5', 'chessboard_blur10x10'])
 
-    notredame_5x5 = blurrer5x5(img2)
-    notredame_10x10 = blurrer10x10(img2)
+    notredame_5x5 = blurrer5x5(notredame)
+    notredame_10x10 = blurrer10x10(notredame)
     show_then_write([notredame_5x5, notredame_10x10],
                     ['notredame_blur5x5', 'notredame_blur10x10'])
 
@@ -146,11 +179,12 @@ if __name__ == '__main__':
         grad, mag, dire = gradient_field(img, 0.1)
         show_gradient(mag, dire, name)
 
-    images_10x10 = {k[:-5]: v for k, v in images.items() if '10x10' in k}
+    images_10x10 = {'chessboard': (chessboard_10x10, chessboard),
+                    'notredame': (notredame_10x10, notredame)}
     window3x3 = summation_kernel(3)
     window5x5 = summation_kernel(5)
 
-    for name, img in images_10x10.items():
+    for name, (img, oimg) in images_10x10.items():
         # Step 3
         grad, mag, dire = gradient_field(img, 0.1)
 
@@ -163,3 +197,11 @@ if __name__ == '__main__':
         eigen_minus5x5 = normalize(eigen_minus5x5, 0, 1)
 
         show_then_write([eigen_minus3x3, eigen_minus5x5], [f'{name}_eigen_3x3', f'{name}_eigen_5x5'])
+
+        # Step 4
+        corners3x3 = non_maximal_suppression(eigen_minus3x3, 25, 0.15)
+        corners5x5 = non_maximal_suppression(eigen_minus5x5, 25, 0.15)
+        show_corner(oimg, corners3x3, '3x3', name)
+        show_corner(oimg, corners5x5, '5x5', name)
+
+
