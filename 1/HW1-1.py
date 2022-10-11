@@ -24,11 +24,10 @@ def apply_kernel(kernel, image):
     return stacked
 
 
-def gaussian_blurrer(k_size, sigma):
+def gaussian_blur(image, k_size, sigma):
     f = gaussian_kernel(k_size, sigma)
     kernel = np.outer(f, f)
-
-    return functools.partial(apply_kernel, kernel)
+    return apply_kernel(kernel, image)
 
 
 def norm_for_showing(image):
@@ -49,7 +48,7 @@ def show_multiple_image(images, titles):
     fig.show()
 
 
-def gradient_field(image, threshold_ratio=0.0):
+def sobel_gradient_field(image, threshold_ratio=0.0):
     sobel = (np.array([[1., 2, 1], [0, 0, 0], [-1, -2, -1]]) / 8,
              np.array([[-1., 0, 1], [-2, 0, 2], [-1, 0, 1]]) / 8)  # (hy, hx)
     image = normalize(image, 0, 1)
@@ -67,7 +66,7 @@ def gradient_field(image, threshold_ratio=0.0):
     return gradient, magnitude, direction
 
 
-def direction_in_hue(magnitude, direction):
+def direction_in_hsv(magnitude, direction):
     hsv = np.zeros(direction.shape, dtype=np.uint8)
 
     hsv[..., 0] = direction.mean(axis=-1) * 180 / np.pi / 2
@@ -98,8 +97,7 @@ def calc_eigen_minus(window, Ixx, Ixy, Iyy):
     det = Ixx * Iyy - Ixy * Ixy
     trace = Ixx + Iyy + 1e-5
     eigen_minus = det / trace
-    response = det - 0.04 * (trace ** 2)
-    return eigen_minus, response
+    return eigen_minus
 
 
 def windowed_slices(idx, wr):
@@ -141,49 +139,43 @@ def show_corner(image, corner, size, name):
     return data
 
 
-def corner_detection(original_image, name):
+def harris_corner_detection(original_image, name):
     img_to_save = {}
 
-    # Step 1: gaussian smooth
-    blurrer5x5 = gaussian_blurrer(5, 5)
-    blurrer10x10 = gaussian_blurrer(10, 5)
+    # Step 1: gaussian blur
+    blurred_images = {'5x5': gaussian_blur(original_image, 5, 5),
+                      '10x10': gaussian_blur(original_image, 10, 5)}
+    show_multiple_image([blurred_images['5x5'], blurred_images['10x10']],
+                        [f'{name}_blur_5x5', f'{name}_blur_10x10'])
+    img_to_save.update({f'{name}_blur_5x5': blurred_images['5x5'],
+                        f'{name}_blur_10x10': blurred_images['10x10']})
 
-    blurred_5x5 = blurrer5x5(original_image)
-    blurred_10x10 = blurrer10x10(original_image)
-    show_multiple_image([blurred_5x5, blurred_10x10],
-                        [f'{name}_blur5x5', f'{name}_blur10x10'])
-    img_to_save.update({f'{name}_blur5x5': blurred_5x5,
-                        f'{name}_blur10x10': blurred_10x10})
+    for b_size, bimg in blurred_images.items():
+        # Step 2: Sobel edge detection
+        grad, mag, dire = sobel_gradient_field(bimg, 0.1)
+        dire_hsv = direction_in_hsv(mag, dire)
+        show_multiple_image([mag, dire_hsv],
+                            [f'{name}_{b_size}_grad_magnitude', f'{name}_{b_size}_grad_direction'])
+        img_to_save.update({f'{name}_{b_size}_grad_magnitude': mag,
+                            f'{name}_{b_size}_grad_direction': dire_hsv})
 
-    blurred_images = {f'5x5': blurred_5x5,
-                      f'10x10': blurred_10x10}
-
-    for suffix, bimg in blurred_images.items():
-        # Step 2
-        grad, mag, dire = gradient_field(bimg, 0.1)
-        dire_rgb = direction_in_hue(mag, dire)
-        show_multiple_image([mag, dire_rgb],
-                            [f'{name}_{suffix}_grad_magnitude', f'{name}_{suffix}_grad_direction'])
-        img_to_save.update({f'{name}_{suffix}_grad_magnitude': mag,
-                            f'{name}_{suffix}_grad_direction': dire_rgb})
-
-        if suffix == '10x10':
-            # Step 3
+        if b_size == '10x10':
+            # Step 3: Compute the structure tensor and its smaller eigenvalue
             Hs = structure_tensor(grad)
-
             windows = {'3x3': summation_kernel(3), '5x5': summation_kernel(5)}
 
-            for suffix, window in windows.items():
-                eigen_minus, resp = calc_eigen_minus(window, *Hs)
+            for w_size, window in windows.items():
+                eigen_minus = calc_eigen_minus(window, *Hs)
+                # if we normalize to 0 ~ 10, we will get a brighter image
                 eigen_minus = normalize(eigen_minus, 0, 1)
 
-                imshow(eigen_minus, f'{name}_eigen_{suffix}')
-                img_to_save.update({f'{name}_eigen_{suffix}': eigen_minus})
+                imshow(eigen_minus, f'{name}_eigen_{w_size}')
+                img_to_save.update({f'{name}_eigen_{w_size}': eigen_minus})
 
-                # Step 4
-                corners = non_maximal_suppression(eigen_minus, 25, 0.15)
-                result = show_corner(original_image, corners, suffix, name)
-                img_to_save.update({f'{name}_corner_detection_{suffix}': result})
+                # Step 4: Non-maximal Suppression
+                corners = non_maximal_suppression(eigen_minus, 25, 0.1)
+                result = show_corner(original_image, corners, w_size, name)
+                img_to_save.update({f'{name}_corner_detection_{w_size}': result})
 
     return img_to_save
 
@@ -195,8 +187,8 @@ if __name__ == '__main__':
     notredame = cv2.imread('1a_notredame.jpg')
     show_multiple_image([chessboard, notredame], ['original chessboard', 'original_notredame'])
 
-    images_to_save.update(corner_detection(chessboard, 'chessboard'))
-    images_to_save.update(corner_detection(notredame, 'notredame'))
+    images_to_save.update(harris_corner_detection(chessboard, 'chessboard'))
+    images_to_save.update(harris_corner_detection(notredame, 'notredame'))
 
     for filename, img in images_to_save.items():
         cv2.imwrite(f'output/normal/{filename}.jpg', normalize(img, 0, 255))
