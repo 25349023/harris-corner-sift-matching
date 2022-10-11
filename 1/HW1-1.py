@@ -1,4 +1,5 @@
 import functools
+import pathlib
 
 import cv2
 import matplotlib.pyplot as plt
@@ -69,7 +70,7 @@ def sobel_gradient_field(image, threshold_ratio=0.0):
 def direction_in_hsv(magnitude, direction):
     hsv = np.zeros(direction.shape, dtype=np.uint8)
 
-    hsv[..., 0] = direction.mean(axis=-1) * 180 / np.pi / 2
+    hsv[..., 0] = direction.mean(axis=-1) * 180 / np.pi / 2 + 90
     hsv[..., 1] = 255
     hsv[..., 2] = normalize(magnitude.mean(axis=-1), 0, 255)
     rgb = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
@@ -173,11 +174,18 @@ def harris_corner_detection(original_image, name):
                 img_to_save.update({f'{name}_eigen_{w_size}': eigen_minus})
 
                 # Step 4: Non-maximal Suppression
-                corners = non_maximal_suppression(eigen_minus, 25, 0.1)
+                corners = non_maximal_suppression(eigen_minus, 15, 0.1)
                 result = show_corner(original_image, corners, w_size, name)
                 img_to_save.update({f'{name}_corner_detection_{w_size}': result})
 
     return img_to_save
+
+
+def similarity_transform(image, angle=0.0, scale=1.0):
+    trans_mat = cv2.getRotationMatrix2D([image.shape[1] / 2, image.shape[0] / 2],
+                                        angle, scale)
+    transformed_image = cv2.warpAffine(image, trans_mat, None, flags=cv2.INTER_LINEAR)
+    return transformed_image
 
 
 if __name__ == '__main__':
@@ -190,5 +198,27 @@ if __name__ == '__main__':
     images_to_save.update(harris_corner_detection(chessboard, 'chessboard'))
     images_to_save.update(harris_corner_detection(notredame, 'notredame'))
 
+    normal_dir = pathlib.Path('output', 'normal')
+    if not normal_dir.exists():
+        normal_dir.mkdir(parents=True, exist_ok=True)
     for filename, img in images_to_save.items():
-        cv2.imwrite(f'output/normal/{filename}.jpg', normalize(img, 0, 255))
+        cv2.imwrite(str(normal_dir / f'{filename}.jpg'), normalize(img, 0, 255))
+
+    images_to_save.clear()
+
+    chessboard_r30 = similarity_transform(chessboard, angle=30)
+    chessboard_s05 = similarity_transform(chessboard, scale=0.5)
+    notredame_r30 = similarity_transform(notredame, angle=30)
+    notredame_s05 = similarity_transform(notredame, scale=0.5)
+
+    images_to_save.update(harris_corner_detection(chessboard_r30, 'chessboard_rotate_30'))
+    images_to_save.update(harris_corner_detection(chessboard_s05, 'chessboard_scale_05'))
+    images_to_save.update(harris_corner_detection(notredame_r30, 'notredame_rotate_30'))
+    images_to_save.update(harris_corner_detection(notredame_s05, 'notredame_scale_05'))
+
+    transformed_dir = pathlib.Path('output', 'transformed')
+    if not transformed_dir.exists():
+        transformed_dir.mkdir(parents=True, exist_ok=True)
+    for filename, img in images_to_save.items():
+        cv2.imwrite(str(transformed_dir / f'{filename}.jpg'), normalize(img, 0, 255))
+
