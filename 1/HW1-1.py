@@ -31,24 +31,6 @@ def gaussian_blur(image, k_size, sigma):
     return apply_kernel(kernel, image)
 
 
-def norm_for_showing(image):
-    image = normalize(image, 0, 255)
-    return cv2.cvtColor(image.astype(np.uint8), cv2.COLOR_BGR2RGB)
-
-
-def imshow(image, title=''):
-    plt.imshow(norm_for_showing(image))
-    plt.title(title)
-
-
-def show_multiple_image(images, titles):
-    fig, ax = plt.subplots(1, len(images), figsize=(16, 10))
-    for i, (image, t) in enumerate(zip(images, titles)):
-        ax[i].imshow(norm_for_showing(image))
-        ax[i].set_title(t)
-    fig.show()
-
-
 def sobel_gradient_field(image, threshold_ratio=0.0):
     sobel = (np.array([[1., 2, 1], [0, 0, 0], [-1, -2, -1]]) / 8,
              np.array([[-1., 0, 1], [-2, 0, 2], [-1, 0, 1]]) / 8)  # (hy, hx)
@@ -127,27 +109,28 @@ def non_maximal_suppression(raw_corner: np.ndarray, w_radius=5, threshold=1e-2):
     return result
 
 
-def show_corner(image, corner, size, name):
+def draw_corner(image, corner):
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
-    imshow(image, f'{name}_corner_detection_{size}')
+    image = normalize(image, 0, 255)
+    ax.imshow(cv2.cvtColor(image.astype(np.uint8), cv2.COLOR_BGR2RGB))
     ax.scatter(corner.nonzero()[1], corner.nonzero()[0], c='r')
     fig.canvas.draw()
+
     data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
     data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
     data = data[..., ::-1]
-    fig.show()
 
     return data
 
 
 def harris_corner_detection(original_image, name):
+    print(f'Harris corner detection for {name}')
+
     img_to_save = {}
 
     # Step 1: gaussian blur
     blurred_images = {'5x5': gaussian_blur(original_image, 5, 5),
                       '10x10': gaussian_blur(original_image, 10, 5)}
-    show_multiple_image([blurred_images['5x5'], blurred_images['10x10']],
-                        [f'{name}_blur_5x5', f'{name}_blur_10x10'])
     img_to_save.update({f'{name}_blur_5x5': blurred_images['5x5'],
                         f'{name}_blur_10x10': blurred_images['10x10']})
 
@@ -155,8 +138,6 @@ def harris_corner_detection(original_image, name):
         # Step 2: Sobel edge detection
         grad, mag, dire = sobel_gradient_field(bimg, 0.1)
         dire_hsv = direction_in_hsv(mag, dire)
-        show_multiple_image([mag, dire_hsv],
-                            [f'{name}_{b_size}_grad_magnitude', f'{name}_{b_size}_grad_direction'])
         img_to_save.update({f'{name}_{b_size}_grad_magnitude': mag,
                             f'{name}_{b_size}_grad_direction': dire_hsv})
 
@@ -170,12 +151,11 @@ def harris_corner_detection(original_image, name):
                 # if we normalize to 0 ~ 10, we will get a brighter image
                 eigen_minus = normalize(eigen_minus, 0, 1)
 
-                imshow(eigen_minus, f'{name}_eigen_{w_size}')
                 img_to_save.update({f'{name}_eigen_{w_size}': eigen_minus})
 
                 # Step 4: Non-maximal Suppression
                 corners = non_maximal_suppression(eigen_minus, 15, 0.1)
-                result = show_corner(original_image, corners, w_size, name)
+                result = draw_corner(original_image, corners)
                 img_to_save.update({f'{name}_corner_detection_{w_size}': result})
 
     return img_to_save
@@ -193,7 +173,6 @@ if __name__ == '__main__':
 
     chessboard = cv2.imread('chessboard-hw1.jpg')
     notredame = cv2.imread('1a_notredame.jpg')
-    show_multiple_image([chessboard, notredame], ['original chessboard', 'original_notredame'])
 
     images_to_save.update(harris_corner_detection(chessboard, 'chessboard'))
     images_to_save.update(harris_corner_detection(notredame, 'notredame'))
@@ -221,4 +200,3 @@ if __name__ == '__main__':
         transformed_dir.mkdir(parents=True, exist_ok=True)
     for filename, img in images_to_save.items():
         cv2.imwrite(str(transformed_dir / f'{filename}.jpg'), normalize(img, 0, 255))
-
