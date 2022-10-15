@@ -18,8 +18,7 @@ def sift_detect(image, n_keypoints):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     sift = cv2.SIFT_create(n_keypoints, 5, sigma=5)
     kp, descriptor = sift.detectAndCompute(gray, None)
-    points = np.array([k.pt for k in kp])
-    return kp, points, descriptor
+    return kp, descriptor
 
 
 if __name__ == '__main__':
@@ -30,11 +29,11 @@ if __name__ == '__main__':
     if not output_dir.exists():
         output_dir.mkdir(parents=True, exist_ok=True)
 
-    left_kp, left_point, left_desc = sift_detect(img_left, 500)
+    left_kp, left_desc = sift_detect(img_left, 500)
     img_left_kp = cv2.drawKeypoints(img_left, left_kp, None)
     cv2.imwrite(str(output_dir / '1a_sift_keypoints.jpg'), img_left_kp)
 
-    right_kp, right_point, right_desc = sift_detect(img_right, 500)
+    right_kp, right_desc = sift_detect(img_right, 500)
     img_left_kp = cv2.drawKeypoints(img_left, left_kp, None)
     cv2.imwrite(str(output_dir / '1b_sift_keypoints.jpg'), img_left_kp)
 
