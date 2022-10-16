@@ -73,6 +73,7 @@ def structure_tensor(gradient):
 
 
 def calc_eigen_minus(window, Ixx, Ixy, Iyy):
+    # sum up all pixels in the window
     Ixx = window(Ixx)
     Ixy = window(Ixy)
     Iyy = window(Iyy)
@@ -96,13 +97,16 @@ def non_maximal_suppression(raw_corner: np.ndarray, w_radius=5, threshold=1e-2):
     raw_corner[raw_corner < threshold] = 0
     result = np.zeros_like(raw_corner)
 
-    flatten_cmap = raw_corner.reshape([-1, raw_corner.shape[-1]])
+    flatten_corner = raw_corner.reshape([-1, raw_corner.shape[-1]])
 
     while np.count_nonzero(raw_corner) > 0:
-        pos = flatten_cmap.argmax(axis=0)
-        unravel_pos = *np.unravel_index(pos, raw_corner.shape[:-1]), np.array([0, 1, 2], dtype=np.int64)
-        result[unravel_pos] = 1
-        neighbor_slices = windowed_slices(unravel_pos, w_radius)
+        local_maximum = flatten_corner.argmax(axis=0)
+        local_maximum = (*np.unravel_index(local_maximum, raw_corner.shape[:-1]),
+                         np.array([0, 1, 2], dtype=np.int64))
+        result[local_maximum] = 1
+
+        # clear (suppress) the neighbor pixel
+        neighbor_slices = windowed_slices(local_maximum, w_radius)
         for neighbor in neighbor_slices:
             raw_corner[neighbor] = 0
 
