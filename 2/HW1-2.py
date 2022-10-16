@@ -29,13 +29,14 @@ if __name__ == '__main__':
     if not output_dir.exists():
         output_dir.mkdir(parents=True, exist_ok=True)
 
-    left_kp, left_desc = sift_detect(img_left, 500)
+    n_feat = 300
+    left_kp, left_desc = sift_detect(img_left, n_feat)
     img_left_kp = cv2.drawKeypoints(img_left, left_kp, None)
     cv2.imwrite(str(output_dir / '1a_sift_keypoints.jpg'), img_left_kp)
 
-    right_kp, right_desc = sift_detect(img_right, 500)
-    img_left_kp = cv2.drawKeypoints(img_left, left_kp, None)
-    cv2.imwrite(str(output_dir / '1b_sift_keypoints.jpg'), img_left_kp)
+    right_kp, right_desc = sift_detect(img_right, n_feat)
+    img_right_kp = cv2.drawKeypoints(img_right, right_kp, None)
+    cv2.imwrite(str(output_dir / '1b_sift_keypoints.jpg'), img_right_kp)
 
     idx = []
     for q, key in enumerate(left_desc):
@@ -47,6 +48,7 @@ if __name__ == '__main__':
                 print('accept: ', distance[t0], distance[t1])
                 break
 
+    print(f'totally {len(idx)} matches.')
     img = cv2.drawMatchesKnn(img_left, left_kp, img_right, right_kp, idx, None,
                              flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
 
